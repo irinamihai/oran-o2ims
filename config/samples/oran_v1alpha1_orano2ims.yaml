@@ -1,0 +1,13 @@
+apiVersion: oran.openshift.io/v1alpha1
+kind: OranO2IMS
+metadata:
+  labels:
+    app.kubernetes.io/name: orano2ims
+    app.kubernetes.io/instance: orano2ims-sample
+    app.kubernetes.io/part-of: oran-o2ims
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: oran-o2ims
+  name: sample
+  namespace: oran
+spec:
+  cloudId: aaa-bbb-ccc
