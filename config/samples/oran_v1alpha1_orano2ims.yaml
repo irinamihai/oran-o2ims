@@ -11,3 +11,4 @@ metadata:
   namespace: oran
 spec:
   cloudId: aaa-bbb-ccc
+  metadataServer: true

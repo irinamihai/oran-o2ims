@@ -36,8 +36,12 @@ spec:
             properties:
               cloudId:
                 type: string
+              metadataServer:
+                default: false
+                type: boolean
             required:
             - cloudId
+            - metadataServer
             type: object
           status:
             description: OranO2IMSStatus defines the observed state of OranO2IMS

@@ -29,6 +29,8 @@ type OranO2IMSSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	CloudId string `json:"cloudId"`
+	//+kubebuilder:default=false
+	MetadataServer bool `json:"metadataServer"`
 	//BackendURL string `json:"backendURL,omitempty"`
 	//BackendToken string `json:"backendToken,omitempty"`
 }
