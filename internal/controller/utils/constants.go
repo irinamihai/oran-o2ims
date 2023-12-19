@@ -1,5 +1,10 @@
 package utils
 
+// Default image
+const (
+	ORANImage = "quay.io/openshift-kni/oran-o2ims:latest"
+)
+
 // Default namespace
 const (
 	ORANO2IMSNamespace = "oran-o2ims"

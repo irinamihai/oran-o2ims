@@ -33,11 +33,13 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -75,12 +77,28 @@ func (r *OranO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	r.Log.Info(">>> Got orano2ims", "Spec.MetadataServer", orano2ims.Spec.MetadataServer)
 	nextReconcile = ctrl.Result{RequeueAfter: 5 * time.Second}
 
-	// Start the metadata server if required.
+	// Create the needed Ingress if at least one server is required by the Spec.
+	if orano2ims.Spec.MetadataServer == true || orano2ims.Spec.ManagerServer == true {
+		err = r.createIngress(ctx, orano2ims)
+		if err != nil {
+			r.Log.Error(err, "Failed to deploy Service for Metadata server.")
+			return
+		}
+	}
+
+	// Start the metadata server if required by the Spec.
 	if orano2ims.Spec.MetadataServer == true {
 		// Create the needed ServiceAccount.
-		err = r.createServiceAccount(ctx, utils.ORANO2IMSMetadataServerName, utils.ORANO2IMSNamespace)
+		err = r.createServiceAccount(ctx, orano2ims)
 		if err != nil {
 			r.Log.Error(err, "Failed to deploy ServiceAccount for Metadata server.")
+			return
+		}
+
+		// Create the Service needed for the Metadata server.
+		err = r.createService(ctx, orano2ims)
+		if err != nil {
+			r.Log.Error(err, "Failed to deploy Service for Metadata server.")
 			return
 		}
 
@@ -121,7 +139,7 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 		Namespace: utils.ORANO2IMSNamespace,
 		Labels: map[string]string{
 			"oran/o2ims": orano2ims.Name,
-			"app": utils.ORANO2IMSMetadataServerName,
+			"app":        utils.ORANO2IMSMetadataServerName,
 		},
 	}
 
@@ -154,7 +172,7 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 				Containers: []corev1.Container{
 					{
 						Name:            "server",
-						Image:           "quay.io/jhernand/o2ims:latest",
+						Image:           utils.ORANImage,
 						ImagePullPolicy: "Always",
 						VolumeMounts: []corev1.VolumeMount{
 							{
@@ -166,13 +184,13 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 						Args: []string{
 							"start",
 							"metadata-server",
-							" --log-level=debug",
-							" --log-file=stdout",
-							" --api-listener-address=0.0.0.0:8000",
-							" --api-listener-tls-crt=/secrets/tls/tls.crt",
-							" --api-listener-tls-key=/secrets/tls/tls.key",
+							"--log-level=debug",
+							"--log-file=stdout",
+							"--api-listener-address=0.0.0.0:8000",
+							"--api-listener-tls-crt=/secrets/tls/tls.crt",
+							"--api-listener-tls-key=/secrets/tls/tls.key",
 							fmt.Sprintf(" --cloud-id=%s", orano2ims.CreationTimestamp.Time),
-							fmt.Sprintf(" --external-address=https://o2ims.%s", "ingress"), // TODO update this once Ingress is created
+							fmt.Sprintf(" --external-address=https://%s", orano2ims.Spec.IngressHost),
 						},
 						Ports: []corev1.ContainerPort{
 							{
@@ -192,18 +210,23 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 		ObjectMeta: deploymentMeta,
 		Spec:       deploymentSpec,
 	}
-	
+
+	// Set owner reference.
+	if err := controllerutil.SetControllerReference(orano2ims, newDeployment, r.Scheme); err != nil {
+		return err
+	}
+
 	return r.Client.Create(ctx, newDeployment)
 }
 
-func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, saName string, saNamespace string) error {
+func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
 	r.Log.Info("[createServiceAccount]")
 	// Build the ServiceAccount object.
 	serviceAccountMeta := metav1.ObjectMeta{
-		Name:      saName,
-		Namespace: saNamespace,
+		Name:      orano2ims.Name,
+		Namespace: orano2ims.Namespace,
 		Annotations: map[string]string{
-			"service.beta.openshift.io/serving-cert-secret-name": fmt.Sprintf("%s-tls", saName),
+			"service.beta.openshift.io/serving-cert-secret-name": fmt.Sprintf("%s-tls", orano2ims.Name),
 		},
 	}
 
@@ -211,9 +234,14 @@ func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, saName s
 		ObjectMeta: serviceAccountMeta,
 	}
 
+	// Set owner reference.
+	if err := controllerutil.SetControllerReference(orano2ims, newServiceAccount, r.Scheme); err != nil {
+		return err
+	}
+
 	// Check if the ServiceAccount already exists.
 	serviceAccount := &corev1.ServiceAccount{}
-	err := r.Get(ctx, types.NamespacedName{Name: saName, Namespace: saNamespace}, serviceAccount)
+	err := r.Get(ctx, types.NamespacedName{Name: orano2ims.Name, Namespace: orano2ims.Namespace}, serviceAccount)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -227,31 +255,30 @@ func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, saName s
 	}
 
 	return nil
-
 }
 
-func (r *OranO2IMSReconciler) createService(ctx context.Context, serviceName string, serviceNamespace string) error {
+func (r *OranO2IMSReconciler) createService(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
 	r.Log.Info("[createServiceAccount]")
 	// Build the Service object.
 	serviceMeta := metav1.ObjectMeta{
-		Name:      serviceName,
-		Namespace: serviceNamespace,
+		Name:      orano2ims.Name,
+		Namespace: orano2ims.Namespace,
 		Labels: map[string]string{
-			"app": serviceName,
+			"app": orano2ims.Name,
 		},
 		Annotations: map[string]string{
-			"service.beta.openshift.io/serving-cert-secret-name": fmt.Sprintf("%s-tls", serviceName),
+			"service.beta.openshift.io/serving-cert-secret-name": fmt.Sprintf("%s-tls", orano2ims.Name),
 		},
 	}
 
 	serviceSpec := corev1.ServiceSpec{
 		Selector: map[string]string{
-			"app": serviceName,
+			"app": orano2ims.Name,
 		},
 		Ports: []corev1.ServicePort{
 			{
-				Name: "api",
-				Port: 8080,
+				Name:       "api",
+				Port:       8080,
 				TargetPort: intstr.FromString("api"),
 			},
 		},
@@ -259,12 +286,17 @@ func (r *OranO2IMSReconciler) createService(ctx context.Context, serviceName str
 
 	newService := &corev1.Service{
 		ObjectMeta: serviceMeta,
-		Spec: serviceSpec,
+		Spec:       serviceSpec,
+	}
+
+	// Set owner reference.
+	if err := controllerutil.SetControllerReference(orano2ims, newService, r.Scheme); err != nil {
+		return err
 	}
 
 	// Check if the Service already exists.
 	service := &corev1.Service{}
-	err := r.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: serviceNamespace}, service)
+	err := r.Get(ctx, types.NamespacedName{Name: orano2ims.Name, Namespace: orano2ims.Namespace}, service)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -278,7 +310,89 @@ func (r *OranO2IMSReconciler) createService(ctx context.Context, serviceName str
 	}
 
 	return nil
+}
 
+func (r *OranO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
+	r.Log.Info("[createIngress]")
+	// Build the Ingress object.
+	ingressMeta := metav1.ObjectMeta{
+		Name:      "api",
+		Namespace: orano2ims.ObjectMeta.Namespace,
+		Annotations: map[string]string{
+			"route.openshift.io/termination": "reencrypt",
+		},
+	}
+
+	ingressSpec := networkingv1.IngressSpec{
+		Rules: []networkingv1.IngressRule{
+			{
+				Host: fmt.Sprintf("o2ims.%s", orano2ims.Spec.IngressHost),
+				IngressRuleValue: networkingv1.IngressRuleValue{
+					HTTP: &networkingv1.HTTPIngressRuleValue{
+						Paths: []networkingv1.HTTPIngressPath{
+							{
+								Path: "/o2ims-infrastructureInventory/v1/deploymentManagers",
+								PathType: func() *networkingv1.PathType {
+									pathType := networkingv1.PathTypePrefix
+									return &pathType
+								}(),
+								Backend: networkingv1.IngressBackend{
+									Service: &networkingv1.IngressServiceBackend{
+										Name: "deployment-manager-server",
+										Port: networkingv1.ServiceBackendPort{
+											Name: "api",
+										},
+									},
+								},
+							},
+							{
+								Path: "/",
+								PathType: func() *networkingv1.PathType {
+									pathType := networkingv1.PathTypePrefix
+									return &pathType
+								}(),
+								Backend: networkingv1.IngressBackend{
+									Service: &networkingv1.IngressServiceBackend{
+										Name: "metadata-server",
+										Port: networkingv1.ServiceBackendPort{
+											Name: "api",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	newIngress := &networkingv1.Ingress{
+		ObjectMeta: ingressMeta,
+		Spec:       ingressSpec,
+	}
+
+	// Set owner reference.
+	if err := controllerutil.SetControllerReference(orano2ims, newIngress, r.Scheme); err != nil {
+		return err
+	}
+
+	// Check if the Ingress already exists.
+	ingress := &networkingv1.Ingress{}
+	err := r.Get(ctx, types.NamespacedName{Name: "api", Namespace: orano2ims.ObjectMeta.Namespace}, ingress)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			err = r.Client.Create(ctx, newIngress)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

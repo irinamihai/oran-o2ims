@@ -31,6 +31,10 @@ type OranO2IMSSpec struct {
 	CloudId string `json:"cloudId"`
 	//+kubebuilder:default=false
 	MetadataServer bool `json:"metadataServer"`
+	//+kubebuilder:default=false
+	ManagerServer bool `json:"managerServer"`
+	//+optional
+	IngressHost string `json:"ingressHost,omitempty"`
 	//BackendURL string `json:"backendURL,omitempty"`
 	//BackendToken string `json:"backendToken,omitempty"`
 }

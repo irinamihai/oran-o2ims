@@ -8,7 +8,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: oran-o2ims
   name: sample
-  namespace: oran
+  namespace: oran-o2ims
 spec:
   cloudId: aaa-bbb-ccc
+  ingressHost: o2ims.apps.global-hub.oran.home.arpa
   metadataServer: true

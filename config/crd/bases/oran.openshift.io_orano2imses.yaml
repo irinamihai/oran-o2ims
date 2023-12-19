@@ -36,11 +36,17 @@ spec:
             properties:
               cloudId:
                 type: string
+              ingressHost:
+                type: string
+              managerServer:
+                default: false
+                type: boolean
               metadataServer:
                 default: false
                 type: boolean
             required:
             - cloudId
+            - managerServer
             - metadataServer
             type: object
           status:

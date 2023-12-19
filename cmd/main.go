@@ -67,6 +67,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	// Restrict to the following namespaces - subject to change.
 	namespaces := [...]string{"default", "oran", "o2ims", "oran-o2ims"} // List of Namespaces
 	defaultNamespaces := make(map[string]cache.Config)
 
