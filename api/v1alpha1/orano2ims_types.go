@@ -32,11 +32,13 @@ type OranO2IMSSpec struct {
 	//+kubebuilder:default=false
 	MetadataServer bool `json:"metadataServer"`
 	//+kubebuilder:default=false
-	ManagerServer bool `json:"managerServer"`
+	DeploymentManagerServer bool `json:"deploymentManagerServer"`
 	//+optional
 	IngressHost string `json:"ingressHost,omitempty"`
-	//BackendURL string `json:"backendURL,omitempty"`
-	//BackendToken string `json:"backendToken,omitempty"`
+	//+optional
+	BackendURL string `json:"backendURL,omitempty"`
+	//+optional
+	BackendToken string `json:"backendToken,omitempty"`
 }
 
 type DeploymentsStatus struct {

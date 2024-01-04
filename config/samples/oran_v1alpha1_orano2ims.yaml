@@ -13,3 +13,6 @@ spec:
   cloudId: aaa-bbb-ccc
   ingressHost: o2ims.apps.global-hub.oran.home.arpa
   metadataServer: true
+  deploymentManagerServer: true
+  backendURL: "url-lala"
+  backenToken: "token-aaaaa"

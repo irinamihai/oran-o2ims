@@ -15,7 +15,8 @@ const (
 	ORANO2IMSMetadataServerName = "metadata-server"
 )
 
-// Secret names
 const (
-	ORANO2IMSMetadataServerSecret = "metadata-server-tls"
+	ORANO2IMSDeploymentManagerServerName = "deployment-manager-server"
 )
+
+// Secret names

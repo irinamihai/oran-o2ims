@@ -78,7 +78,7 @@ func (r *OranO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	nextReconcile = ctrl.Result{RequeueAfter: 5 * time.Second}
 
 	// Create the needed Ingress if at least one server is required by the Spec.
-	if orano2ims.Spec.MetadataServer == true || orano2ims.Spec.ManagerServer == true {
+	if orano2ims.Spec.MetadataServer || orano2ims.Spec.DeploymentManagerServer {
 		err = r.createIngress(ctx, orano2ims)
 		if err != nil {
 			r.Log.Error(err, "Failed to deploy Service for Metadata server.")
@@ -87,16 +87,16 @@ func (r *OranO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Start the metadata server if required by the Spec.
-	if orano2ims.Spec.MetadataServer == true {
+	if orano2ims.Spec.MetadataServer {
 		// Create the needed ServiceAccount.
-		err = r.createServiceAccount(ctx, orano2ims)
+		err = r.createServiceAccount(ctx, orano2ims, utils.ORANO2IMSMetadataServerName)
 		if err != nil {
 			r.Log.Error(err, "Failed to deploy ServiceAccount for Metadata server.")
 			return
 		}
 
 		// Create the Service needed for the Metadata server.
-		err = r.createService(ctx, orano2ims)
+		err = r.createService(ctx, orano2ims, utils.ORANO2IMSMetadataServerName)
 		if err != nil {
 			r.Log.Error(err, "Failed to deploy Service for Metadata server.")
 			return
@@ -110,28 +110,35 @@ func (r *OranO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	// Start the deployment server if required by the Spec.
+	if orano2ims.Spec.DeploymentManagerServer {
+		// Create the needed ServiceAccount.
+		err = r.createServiceAccount(ctx, orano2ims, utils.ORANO2IMSDeploymentManagerServerName)
+		if err != nil {
+			r.Log.Error(err, "Failed to deploy ServiceAccount for Deployment Manager server.")
+			return
+		}
+
+		// Create the Service needed for the Metadata server.
+		err = r.createService(ctx, orano2ims, utils.ORANO2IMSMetadataServerName)
+		if err != nil {
+			r.Log.Error(err, "Failed to deploy Service for Deployment Manager server.")
+			return
+		}
+
+		// Create the metadata-server deployment.
+		err = r.deployDeploymentManagerServer(ctx, orano2ims)
+		if err != nil {
+			r.Log.Error(err, "Failed to deploy the Deployment Manager server.")
+			return
+		}
+	}
+
 	return
 }
 
 func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
 	r.Log.Info("[deployMetadataServer]")
-
-	// Check if the Deployment already exists.
-	deployment := &appsv1.Deployment{}
-	err := r.Get(ctx,
-		types.NamespacedName{Name: utils.ORANO2IMSMetadataServerName, Namespace: utils.ORANO2IMSNamespace},
-		deployment)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Log.Info("[deployMetadataServer] Deployment not found, create it")
-		} else {
-			return err
-		}
-	} else {
-		r.Log.Info("[deployMetadataServer] Deployment already present, return")
-		return nil
-	}
 
 	// Build the deployment's metadata.
 	deploymentMeta := metav1.ObjectMeta{
@@ -164,7 +171,7 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 						Name: "tls",
 						VolumeSource: corev1.VolumeSource{
 							Secret: &corev1.SecretVolumeSource{
-								SecretName: utils.ORANO2IMSMetadataServerSecret,
+								SecretName: fmt.Sprintf("%s-tls", utils.ORANO2IMSMetadataServerName),
 							},
 						},
 					},
@@ -189,8 +196,8 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 							"--api-listener-address=0.0.0.0:8000",
 							"--api-listener-tls-crt=/secrets/tls/tls.crt",
 							"--api-listener-tls-key=/secrets/tls/tls.key",
-							fmt.Sprintf(" --cloud-id=%s", orano2ims.CreationTimestamp.Time),
-							fmt.Sprintf(" --external-address=https://%s", orano2ims.Spec.IngressHost),
+							fmt.Sprintf("--cloud-id=%s", orano2ims.Spec.CloudId),
+							fmt.Sprintf("--external-address=https://%s", orano2ims.Spec.IngressHost),
 						},
 						Ports: []corev1.ContainerPort{
 							{
@@ -216,14 +223,156 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 		return err
 	}
 
-	return r.Client.Create(ctx, newDeployment)
+	// Check if the Deployment already exists.
+	deployment := &appsv1.Deployment{}
+	err := r.Get(ctx,
+		types.NamespacedName{Name: utils.ORANO2IMSMetadataServerName, Namespace: utils.ORANO2IMSNamespace},
+		deployment)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.Log.Info("[deployMetadataServer] Metadata Deployment not found, create it")
+			r.Client.Create(ctx, newDeployment)
+		} else {
+			return err
+		}
+	} else {
+		r.Log.Info("[deployMetadataServer] Deployment already present, update it")
+		newDeployment.SetResourceVersion(deployment.GetResourceVersion())
+		return r.Client.Update(ctx, newDeployment)
+	}
+
+	return nil
 }
 
-func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
+func (r *OranO2IMSReconciler) deployDeploymentManagerServer(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
+	r.Log.Info("[deployMetadataServer]")
+
+	// Build the deployment's metadata.
+	deploymentMeta := metav1.ObjectMeta{
+		Name:      utils.ORANO2IMSDeploymentManagerServerName,
+		Namespace: utils.ORANO2IMSNamespace,
+		Labels: map[string]string{
+			"oran/o2ims": orano2ims.Name,
+			"app":        utils.ORANO2IMSDeploymentManagerServerName,
+		},
+	}
+
+	// Build the deployment's spec.
+	deploymentSpec := appsv1.DeploymentSpec{
+		Replicas: k8sptr.To(int32(1)),
+		Selector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": utils.ORANO2IMSDeploymentManagerServerName,
+			},
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: map[string]string{
+					"app": utils.ORANO2IMSDeploymentManagerServerName,
+				},
+			},
+			Spec: corev1.PodSpec{
+				ServiceAccountName: utils.ORANO2IMSDeploymentManagerServerName,
+				Volumes: []corev1.Volume{
+					{
+						Name: "tls",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: fmt.Sprintf("%s-tls", utils.ORANO2IMSDeploymentManagerServerName),
+							},
+						},
+					},
+					{
+						Name: "authz",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "authz"},
+							},
+						},
+					},
+				},
+				Containers: []corev1.Container{
+					{
+						Name:            "server",
+						Image:           utils.ORANImage,
+						ImagePullPolicy: "Always",
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "tls",
+								MountPath: "/secrets/tls",
+							},
+							{
+								Name:      "authz",
+								MountPath: "/configmaps/authz",
+							},
+						},
+						Command: []string{"/usr/bin/oran-o2ims"},
+						Args: []string{
+							"start",
+							"metadata-server",
+							"--log-level=debug",
+							"--log-file=stdout",
+							"--api-listener-address=0.0.0.0:8000",
+							"--api-listener-tls-crt=/secrets/tls/tls.crt",
+							"--api-listener-tls-key=/secrets/tls/tls.key",
+							"--authn-jwks-url=https://kubernetes.default.svc/openid/v1/jwks",
+							"--authn-jwks-token-file=/run/secrets/kubernetes.io/serviceaccount/token",
+							"--authn-jwks-ca-file=/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+							"--authz-acl-file=/configmaps/authz/acl.yaml",
+							fmt.Sprintf("--cloud-id=%s", orano2ims.CreationTimestamp.Time),
+							fmt.Sprintf("--backend-url=%s", orano2ims.Spec.BackendURL),
+							fmt.Sprintf("--backend-token=%s", orano2ims.Spec.BackendToken),
+						},
+						Ports: []corev1.ContainerPort{
+							{
+								Name:          "api",
+								Protocol:      corev1.ProtocolTCP,
+								ContainerPort: 8080,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Build the deployment.
+	newDeployment := &appsv1.Deployment{
+		ObjectMeta: deploymentMeta,
+		Spec:       deploymentSpec,
+	}
+
+	// Set owner reference.
+	if err := controllerutil.SetControllerReference(orano2ims, newDeployment, r.Scheme); err != nil {
+		return err
+	}
+
+	// Check if the Deployment already exists.
+	deployment := &appsv1.Deployment{}
+	err := r.Get(ctx,
+		types.NamespacedName{Name: utils.ORANO2IMSDeploymentManagerServerName, Namespace: utils.ORANO2IMSNamespace},
+		deployment)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.Log.Info("[deployMetadataServer] Manager Deployment not found, create it")
+			return r.Client.Create(ctx, newDeployment)
+		} else {
+			return err
+		}
+	} else {
+		r.Log.Info("[deployMetadataServer] Manager Deployment already present, update it")
+		newDeployment.SetResourceVersion(deployment.GetResourceVersion())
+		return r.Client.Update(ctx, newDeployment)
+	}
+}
+
+func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS, resourceName string) error {
 	r.Log.Info("[createServiceAccount]")
 	// Build the ServiceAccount object.
 	serviceAccountMeta := metav1.ObjectMeta{
-		Name:      orano2ims.Name,
+		Name:      resourceName,
 		Namespace: orano2ims.Namespace,
 		Annotations: map[string]string{
 			"service.beta.openshift.io/serving-cert-secret-name": fmt.Sprintf("%s-tls", orano2ims.Name),
@@ -241,10 +390,11 @@ func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, orano2im
 
 	// Check if the ServiceAccount already exists.
 	serviceAccount := &corev1.ServiceAccount{}
-	err := r.Get(ctx, types.NamespacedName{Name: orano2ims.Name, Namespace: orano2ims.Namespace}, serviceAccount)
+	err := r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: orano2ims.Namespace}, serviceAccount)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
+			r.Log.Info("[createServiceAccount] ServiceAccount not found, create it")
 			err = r.Client.Create(ctx, newServiceAccount)
 			if err != nil {
 				return err
@@ -252,33 +402,37 @@ func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, orano2im
 		} else {
 			return err
 		}
+	} else {
+		r.Log.Info("[createServiceAccount] ServiceAccount already present, update it")
+		newServiceAccount.SetResourceVersion(serviceAccount.GetResourceVersion())
+		return r.Client.Update(ctx, newServiceAccount)
 	}
 
 	return nil
 }
 
-func (r *OranO2IMSReconciler) createService(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
-	r.Log.Info("[createServiceAccount]")
+func (r *OranO2IMSReconciler) createService(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS, resourceName string) error {
+	r.Log.Info("[createService]")
 	// Build the Service object.
 	serviceMeta := metav1.ObjectMeta{
-		Name:      orano2ims.Name,
+		Name:      resourceName,
 		Namespace: orano2ims.Namespace,
 		Labels: map[string]string{
-			"app": orano2ims.Name,
+			"app": resourceName,
 		},
 		Annotations: map[string]string{
-			"service.beta.openshift.io/serving-cert-secret-name": fmt.Sprintf("%s-tls", orano2ims.Name),
+			"service.beta.openshift.io/serving-cert-secret-name": fmt.Sprintf("%s-tls", resourceName),
 		},
 	}
 
 	serviceSpec := corev1.ServiceSpec{
 		Selector: map[string]string{
-			"app": orano2ims.Name,
+			"app": resourceName,
 		},
 		Ports: []corev1.ServicePort{
 			{
 				Name:       "api",
-				Port:       8080,
+				Port:       8000,
 				TargetPort: intstr.FromString("api"),
 			},
 		},
@@ -296,10 +450,11 @@ func (r *OranO2IMSReconciler) createService(ctx context.Context, orano2ims *oran
 
 	// Check if the Service already exists.
 	service := &corev1.Service{}
-	err := r.Get(ctx, types.NamespacedName{Name: orano2ims.Name, Namespace: orano2ims.Namespace}, service)
+	err := r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: orano2ims.Namespace}, service)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
+			r.Log.Info("[createService] Service not found, create it")
 			err = r.Client.Create(ctx, newService)
 			if err != nil {
 				return err
@@ -307,6 +462,10 @@ func (r *OranO2IMSReconciler) createService(ctx context.Context, orano2ims *oran
 		} else {
 			return err
 		}
+	} else {
+		r.Log.Info("[createService] Service already present, update it")
+		newService.SetResourceVersion(service.GetResourceVersion())
+		return r.Client.Patch(ctx, service, client.MergeFrom(newService))
 	}
 
 	return nil
@@ -383,6 +542,7 @@ func (r *OranO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oran
 
 	if err != nil {
 		if errors.IsNotFound(err) {
+			r.Log.Info("[createIngress] Ingress not present, create it")
 			err = r.Client.Create(ctx, newIngress)
 			if err != nil {
 				return err
@@ -390,6 +550,10 @@ func (r *OranO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oran
 		} else {
 			return err
 		}
+	} else {
+		r.Log.Info("[createIngress] Ingress already present, update it")
+		newIngress.SetResourceVersion(ingress.GetResourceVersion())
+		return r.Client.Update(ctx, newIngress)
 	}
 
 	return nil

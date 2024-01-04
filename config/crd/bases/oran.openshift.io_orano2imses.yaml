@@ -34,19 +34,23 @@ spec:
           spec:
             description: OranO2IMSSpec defines the desired state of OranO2IMS
             properties:
+              backendToken:
+                type: string
+              backendURL:
+                type: string
               cloudId:
                 type: string
-              ingressHost:
-                type: string
-              managerServer:
+              deploymentManagerServer:
                 default: false
                 type: boolean
+              ingressHost:
+                type: string
               metadataServer:
                 default: false
                 type: boolean
             required:
             - cloudId
-            - managerServer
+            - deploymentManagerServer
             - metadataServer
             type: object
           status:
