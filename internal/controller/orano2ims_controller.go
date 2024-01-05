@@ -22,9 +22,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sptr "k8s.io/utils/ptr"
 
@@ -39,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
@@ -67,14 +64,13 @@ type OranO2IMSReconciler struct {
 func (r *OranO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (nextReconcile ctrl.Result, err error) {
 	orano2ims := &oranv1alpha1.OranO2IMS{}
 	if err := r.Get(ctx, req.NamespacedName, orano2ims); err != nil {
-		r.Log.Error(err, "Unable to fetch Oran")
+		r.Log.Error(err, "Unable to fetch ORANO2IMS")
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	r.Log.Info(">>> Got orano2ims", "Spec.CloudId", orano2ims.Spec.CloudId)
-	r.Log.Info(">>> Got orano2ims", "Spec.MetadataServer", orano2ims.Spec.MetadataServer)
+	// TODO: Update the reconcile time
 	nextReconcile = ctrl.Result{RequeueAfter: 5 * time.Second}
 
 	// Create the needed Ingress if at least one server is required by the Spec.
@@ -127,7 +123,7 @@ func (r *OranO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// Create the metadata-server deployment.
-		err = r.deployDeploymentManagerServer(ctx, orano2ims)
+		err = r.deployManagerServer(ctx, orano2ims)
 		if err != nil {
 			r.Log.Error(err, "Failed to deploy the Deployment Manager server.")
 			return
@@ -218,35 +214,13 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 		Spec:       deploymentSpec,
 	}
 
-	// Set owner reference.
-	if err := controllerutil.SetControllerReference(orano2ims, newDeployment, r.Scheme); err != nil {
-		return err
-	}
-
-	// Check if the Deployment already exists.
-	deployment := &appsv1.Deployment{}
-	err := r.Get(ctx,
-		types.NamespacedName{Name: utils.ORANO2IMSMetadataServerName, Namespace: utils.ORANO2IMSNamespace},
-		deployment)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Log.Info("[deployMetadataServer] Metadata Deployment not found, create it")
-			r.Client.Create(ctx, newDeployment)
-		} else {
-			return err
-		}
-	} else {
-		r.Log.Info("[deployMetadataServer] Deployment already present, update it")
-		newDeployment.SetResourceVersion(deployment.GetResourceVersion())
-		return r.Client.Update(ctx, newDeployment)
-	}
-
-	return nil
+	r.Log.Info("[deployMetadataServer] Create/Update/Patch the Metadata Server")
+	return utils.CreateK8sCR(ctx, r.Client, utils.ORANO2IMSMetadataServerName, utils.ORANO2IMSNamespace,
+		newDeployment, orano2ims, &appsv1.Deployment{}, r.Scheme, utils.UPDATE)
 }
 
-func (r *OranO2IMSReconciler) deployDeploymentManagerServer(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
-	r.Log.Info("[deployMetadataServer]")
+func (r *OranO2IMSReconciler) deployManagerServer(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
+	r.Log.Info("[deployManagerServer]")
 
 	// Build the deployment's metadata.
 	deploymentMeta := metav1.ObjectMeta{
@@ -323,6 +297,13 @@ func (r *OranO2IMSReconciler) deployDeploymentManagerServer(ctx context.Context,
 							fmt.Sprintf("--cloud-id=%s", orano2ims.CreationTimestamp.Time),
 							fmt.Sprintf("--backend-url=%s", orano2ims.Spec.BackendURL),
 							fmt.Sprintf("--backend-token=%s", orano2ims.Spec.BackendToken),
+							fmt.Sprintln(
+								// TODO: properly hold the extensions instead of hardcoding them.
+								"--extensions={\n",
+								"\"country\": .metadata.labels[\"country\"],\n",
+								"\"version\": .metadata.labels[\"openshiftVersion\"],\n",
+								"\"hub\": .metadata.annotations[\"global-hub.open-cluster-management.io/managed-by\"],",
+								"}"),
 						},
 						Ports: []corev1.ContainerPort{
 							{
@@ -343,29 +324,9 @@ func (r *OranO2IMSReconciler) deployDeploymentManagerServer(ctx context.Context,
 		Spec:       deploymentSpec,
 	}
 
-	// Set owner reference.
-	if err := controllerutil.SetControllerReference(orano2ims, newDeployment, r.Scheme); err != nil {
-		return err
-	}
-
-	// Check if the Deployment already exists.
-	deployment := &appsv1.Deployment{}
-	err := r.Get(ctx,
-		types.NamespacedName{Name: utils.ORANO2IMSDeploymentManagerServerName, Namespace: utils.ORANO2IMSNamespace},
-		deployment)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Log.Info("[deployMetadataServer] Manager Deployment not found, create it")
-			return r.Client.Create(ctx, newDeployment)
-		} else {
-			return err
-		}
-	} else {
-		r.Log.Info("[deployMetadataServer] Manager Deployment already present, update it")
-		newDeployment.SetResourceVersion(deployment.GetResourceVersion())
-		return r.Client.Update(ctx, newDeployment)
-	}
+	r.Log.Info("[deployManagerServer] Create/Update/Patch the Manager Server")
+	return utils.CreateK8sCR(ctx, r.Client, utils.ORANO2IMSDeploymentManagerServerName, orano2ims.Namespace,
+		newDeployment, orano2ims, &appsv1.Deployment{}, r.Scheme, utils.UPDATE)
 }
 
 func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS, resourceName string) error {
@@ -383,32 +344,9 @@ func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, orano2im
 		ObjectMeta: serviceAccountMeta,
 	}
 
-	// Set owner reference.
-	if err := controllerutil.SetControllerReference(orano2ims, newServiceAccount, r.Scheme); err != nil {
-		return err
-	}
-
-	// Check if the ServiceAccount already exists.
-	serviceAccount := &corev1.ServiceAccount{}
-	err := r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: orano2ims.Namespace}, serviceAccount)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Log.Info("[createServiceAccount] ServiceAccount not found, create it")
-			err = r.Client.Create(ctx, newServiceAccount)
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-	} else {
-		r.Log.Info("[createServiceAccount] ServiceAccount already present, update it")
-		newServiceAccount.SetResourceVersion(serviceAccount.GetResourceVersion())
-		return r.Client.Update(ctx, newServiceAccount)
-	}
-
-	return nil
+	r.Log.Info("[createServiceAccount] Create/Update/Patch ServiceAccount: ", "name", resourceName)
+	return utils.CreateK8sCR(ctx, r.Client, resourceName, orano2ims.Namespace,
+		newServiceAccount, orano2ims, &corev1.ServiceAccount{}, r.Scheme, utils.UPDATE)
 }
 
 func (r *OranO2IMSReconciler) createService(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS, resourceName string) error {
@@ -443,39 +381,16 @@ func (r *OranO2IMSReconciler) createService(ctx context.Context, orano2ims *oran
 		Spec:       serviceSpec,
 	}
 
-	// Set owner reference.
-	if err := controllerutil.SetControllerReference(orano2ims, newService, r.Scheme); err != nil {
-		return err
-	}
-
-	// Check if the Service already exists.
-	service := &corev1.Service{}
-	err := r.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: orano2ims.Namespace}, service)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Log.Info("[createService] Service not found, create it")
-			err = r.Client.Create(ctx, newService)
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-	} else {
-		r.Log.Info("[createService] Service already present, update it")
-		newService.SetResourceVersion(service.GetResourceVersion())
-		return r.Client.Patch(ctx, service, client.MergeFrom(newService))
-	}
-
-	return nil
+	r.Log.Info("[createService] Create/Update/Patch Service: ", "name", resourceName)
+	return utils.CreateK8sCR(ctx, r.Client, resourceName, orano2ims.Namespace,
+		newService, orano2ims, &corev1.Service{}, r.Scheme, utils.PATCH)
 }
 
 func (r *OranO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
 	r.Log.Info("[createIngress]")
 	// Build the Ingress object.
 	ingressMeta := metav1.ObjectMeta{
-		Name:      "api",
+		Name:      utils.ORANO2IMSIngressName,
 		Namespace: orano2ims.ObjectMeta.Namespace,
 		Annotations: map[string]string{
 			"route.openshift.io/termination": "reencrypt",
@@ -499,7 +414,7 @@ func (r *OranO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oran
 									Service: &networkingv1.IngressServiceBackend{
 										Name: "deployment-manager-server",
 										Port: networkingv1.ServiceBackendPort{
-											Name: "api",
+											Name: utils.ORANO2IMSIngressName,
 										},
 									},
 								},
@@ -514,7 +429,7 @@ func (r *OranO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oran
 									Service: &networkingv1.IngressServiceBackend{
 										Name: "metadata-server",
 										Port: networkingv1.ServiceBackendPort{
-											Name: "api",
+											Name: utils.ORANO2IMSIngressName,
 										},
 									},
 								},
@@ -531,32 +446,9 @@ func (r *OranO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oran
 		Spec:       ingressSpec,
 	}
 
-	// Set owner reference.
-	if err := controllerutil.SetControllerReference(orano2ims, newIngress, r.Scheme); err != nil {
-		return err
-	}
-
-	// Check if the Ingress already exists.
-	ingress := &networkingv1.Ingress{}
-	err := r.Get(ctx, types.NamespacedName{Name: "api", Namespace: orano2ims.ObjectMeta.Namespace}, ingress)
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.Log.Info("[createIngress] Ingress not present, create it")
-			err = r.Client.Create(ctx, newIngress)
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
-	} else {
-		r.Log.Info("[createIngress] Ingress already present, update it")
-		newIngress.SetResourceVersion(ingress.GetResourceVersion())
-		return r.Client.Update(ctx, newIngress)
-	}
-
-	return nil
+	r.Log.Info("[createIngress] Create/Update/Patch Ingress: ", "name", utils.ORANO2IMSIngressName)
+	return utils.CreateK8sCR(ctx, r.Client, utils.ORANO2IMSIngressName, orano2ims.Namespace,
+		newIngress, orano2ims, &networkingv1.Ingress{}, r.Scheme, utils.UPDATE)
 }
 
 // SetupWithManager sets up the controller with the Manager.

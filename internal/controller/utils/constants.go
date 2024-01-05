@@ -12,11 +12,17 @@ const (
 
 // Deployment names
 const (
-	ORANO2IMSMetadataServerName = "metadata-server"
-)
-
-const (
+	ORANO2IMSMetadataServerName          = "metadata-server"
 	ORANO2IMSDeploymentManagerServerName = "deployment-manager-server"
 )
 
-// Secret names
+// CR default names
+const (
+	ORANO2IMSIngressName = "api"
+)
+
+// Resource operations
+const (
+	UPDATE = "Update"
+	PATCH  = "Patch"
+)
