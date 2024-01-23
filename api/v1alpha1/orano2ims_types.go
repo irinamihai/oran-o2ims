@@ -42,7 +42,12 @@ type OranO2IMSSpec struct {
 }
 
 type DeploymentsStatus struct {
+	// +operator-sdk:csv:customresourcedefinitions:type=status,displayName="Deploymeny Server Status"
+	DeploymentServerStatus string `json:"deploymentServerStatus,omitempty"`
+	// +operator-sdk:csv:customresourcedefinitions:type=status,displayName="Metadata Server Status"
 	MetadataServerStatus string `json:"metadataServerStatus,omitempty"`
+	// +operator-sdk:csv:customresourcedefinitions:type=status,displayName="Conditions"
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // OranO2IMSStatus defines the observed state of OranO2IMS

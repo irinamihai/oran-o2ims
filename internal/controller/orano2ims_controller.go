@@ -22,7 +22,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sptr "k8s.io/utils/ptr"
 
@@ -130,7 +133,105 @@ func (r *OranO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	r.updateOranO2ISMStatus(ctx, orano2ims)
 	return
+}
+
+func (r *OranO2IMSReconciler) updateOranO2ISMStatus(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) {
+
+	r.Log.Info(">>> update status")
+	if orano2ims.Spec.MetadataServer {
+		deployment := &appsv1.Deployment{}
+		err := r.Get(ctx, types.NamespacedName{Name: utils.ORANO2IMSMetadataServerName, Namespace: utils.ORANO2IMSNamespace}, deployment)
+
+		if err != nil {
+			reason := string(utils.OranO2IMSConditionReasons.ErrorGettingDeploymentInformation)
+			if errors.IsNotFound(err) {
+				reason = string(utils.OranO2IMSConditionReasons.DeploymentNotFound)
+			}
+			meta.SetStatusCondition(
+				&orano2ims.Status.DeploymentsStatus.Conditions,
+				metav1.Condition{
+					Type:    string(utils.OranO2IMSConditionTypes.Error),
+					Status:  metav1.ConditionTrue,
+					Reason:  reason,
+					Message: "Error when querying for the metadata server",
+				},
+			)
+
+			meta.SetStatusCondition(
+				&orano2ims.Status.DeploymentsStatus.Conditions,
+				metav1.Condition{
+					Type:    string(utils.OranO2IMSConditionTypes.Ready),
+					Status:  metav1.ConditionFalse,
+					Reason:  string(utils.OranO2IMSConditionReasons.DeploymentsReady),
+					Message: "The ORAN O2IMS Deployments are not yet ready",
+				},
+			)
+		} else {
+			for _, condition := range deployment.Status.Conditions {
+				if condition.Type == "Available" {
+					meta.SetStatusCondition(
+						&orano2ims.Status.DeploymentsStatus.Conditions,
+						metav1.Condition{
+							Type:    string(utils.OranO2IMSConditionTypes.MetadataServerAvailable),
+							Status:  metav1.ConditionStatus(condition.Status),
+							Reason:  condition.Reason,
+							Message: condition.Message,
+						},
+					)
+				}
+			}
+		}
+	}
+
+	if orano2ims.Spec.DeploymentManagerServer {
+		deployment := &appsv1.Deployment{}
+		err := r.Get(ctx, types.NamespacedName{Name: utils.ORANO2IMSDeploymentManagerServerName, Namespace: utils.ORANO2IMSNamespace}, deployment)
+
+		if err != nil {
+			reason := string(utils.OranO2IMSConditionReasons.ErrorGettingDeploymentInformation)
+			if errors.IsNotFound(err) {
+				reason = string(utils.OranO2IMSConditionReasons.DeploymentNotFound)
+			}
+
+			meta.SetStatusCondition(
+				&orano2ims.Status.DeploymentsStatus.Conditions,
+				metav1.Condition{
+					Type:    string(utils.OranO2IMSConditionTypes.Error),
+					Status:  metav1.ConditionTrue,
+					Reason:  reason,
+					Message: "Error when querying for the metadata server",
+				},
+			)
+
+			meta.SetStatusCondition(
+				&orano2ims.Status.DeploymentsStatus.Conditions,
+				metav1.Condition{
+					Type:    string(utils.OranO2IMSConditionTypes.Ready),
+					Status:  metav1.ConditionFalse,
+					Reason:  string(utils.OranO2IMSConditionReasons.DeploymentsReady),
+					Message: "The ORAN O2IMS Deployments are not yet ready",
+				},
+			)
+		} else {
+			for _, condition := range deployment.Status.Conditions {
+				if condition.Type == "Available" {
+					meta.SetStatusCondition(
+						&orano2ims.Status.DeploymentsStatus.Conditions,
+						metav1.Condition{
+							Type:    string(utils.OranO2IMSConditionTypes.DeploymentServerAvailable),
+							Status:  metav1.ConditionStatus(condition.Status),
+							Reason:  condition.Reason,
+							Message: condition.Message,
+						},
+					)
+				}
+			}
+		}
+	}
+
+	r.Status().Update(ctx, orano2ims)
 }
 
 func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
