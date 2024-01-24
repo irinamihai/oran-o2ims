@@ -14,7 +14,7 @@ resources:
   controller: true
   domain: openshift.io
   group: oran
-  kind: OranO2IMS
+  kind: ORANO2IMS
   path: oran-o2ims/api/v1alpha1
   version: v1alpha1
 version: "3"

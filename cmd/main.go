@@ -102,12 +102,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.OranO2IMSReconciler{
+	if err = (&controller.ORANO2IMSReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controller").WithName("ORAN-O2IMS"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "OranO2IMS")
+		setupLog.Error(err, "unable to create controller", "controller", "ORANO2IMS")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

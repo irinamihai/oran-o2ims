@@ -1,5 +1,5 @@
 apiVersion: oran.openshift.io/v1alpha1
-kind: OranO2IMS
+kind: ORANO2IMS
 metadata:
   labels:
     app.kubernetes.io/name: orano2ims

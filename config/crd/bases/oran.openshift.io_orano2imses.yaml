@@ -8,8 +8,8 @@ metadata:
 spec:
   group: oran.openshift.io
   names:
-    kind: OranO2IMS
-    listKind: OranO2IMSList
+    kind: ORANO2IMS
+    listKind: ORANO2IMSList
     plural: orano2imses
     singular: orano2ims
   scope: Namespaced
@@ -17,7 +17,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: OranO2IMS is the Schema for the orano2ims API
+        description: ORANO2IMS is the Schema for the orano2ims API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -32,7 +32,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: OranO2IMSSpec defines the desired state of OranO2IMS
+            description: ORANO2IMSSpec defines the desired state of ORANO2IMS
             properties:
               backendToken:
                 type: string
@@ -54,7 +54,7 @@ spec:
             - metadataServer
             type: object
           status:
-            description: OranO2IMSStatus defines the observed state of OranO2IMS
+            description: ORANO2IMSStatus defines the observed state of ORANO2IMS
             properties:
               deploymentStatus:
                 description: 'INSERT ADDITIONAL STATUS FIELD - define observed state

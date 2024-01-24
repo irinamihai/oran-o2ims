@@ -23,8 +23,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// OranO2IMSSpec defines the desired state of OranO2IMS
-type OranO2IMSSpec struct {
+// ORANO2IMSSpec defines the desired state of ORANO2IMS
+type ORANO2IMSSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -50,8 +50,8 @@ type DeploymentsStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// OranO2IMSStatus defines the observed state of OranO2IMS
-type OranO2IMSStatus struct {
+// ORANO2IMSStatus defines the observed state of ORANO2IMS
+type ORANO2IMSStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	DeploymentsStatus DeploymentsStatus `json:"deploymentStatus,omitempty"`
@@ -60,24 +60,24 @@ type OranO2IMSStatus struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// OranO2IMS is the Schema for the orano2ims API
-type OranO2IMS struct {
+// ORANO2IMS is the Schema for the orano2ims API
+type ORANO2IMS struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   OranO2IMSSpec   `json:"spec,omitempty"`
-	Status OranO2IMSStatus `json:"status,omitempty"`
+	Spec   ORANO2IMSSpec   `json:"spec,omitempty"`
+	Status ORANO2IMSStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// OranO2IMSList contains a list of OranO2IMS
-type OranO2IMSList struct {
+// ORANO2IMSList contains a list of ORANO2IMS
+type ORANO2IMSList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []OranO2IMS `json:"items"`
+	Items           []ORANO2IMS `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&OranO2IMS{}, &OranO2IMSList{})
+	SchemeBuilder.Register(&ORANO2IMS{}, &ORANO2IMSList{})
 }

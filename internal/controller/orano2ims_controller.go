@@ -44,8 +44,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-// OranO2IMSReconciler reconciles a OranO2IMS object
-type OranO2IMSReconciler struct {
+// ORANO2IMSReconciler reconciles a ORANO2IMS object
+type ORANO2IMSReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
@@ -58,14 +58,14 @@ type OranO2IMSReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
-// the OranO2IMS object against the actual cluster state, and then
+// the ORANO2IMS object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.16.3/pkg/reconcile
-func (r *OranO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (nextReconcile ctrl.Result, err error) {
-	orano2ims := &oranv1alpha1.OranO2IMS{}
+func (r *ORANO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (nextReconcile ctrl.Result, err error) {
+	orano2ims := &oranv1alpha1.ORANO2IMS{}
 	if err := r.Get(ctx, req.NamespacedName, orano2ims); err != nil {
 		r.Log.Error(err, "Unable to fetch ORANO2IMS")
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
@@ -133,108 +133,11 @@ func (r *OranO2IMSReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	r.updateOranO2ISMStatus(ctx, orano2ims)
+	r.updateORANO2ISMStatus(ctx, orano2ims)
 	return
 }
 
-func (r *OranO2IMSReconciler) updateOranO2ISMStatus(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) {
-
-	r.Log.Info(">>> update status")
-	if orano2ims.Spec.MetadataServer {
-		deployment := &appsv1.Deployment{}
-		err := r.Get(ctx, types.NamespacedName{Name: utils.ORANO2IMSMetadataServerName, Namespace: utils.ORANO2IMSNamespace}, deployment)
-
-		if err != nil {
-			reason := string(utils.OranO2IMSConditionReasons.ErrorGettingDeploymentInformation)
-			if errors.IsNotFound(err) {
-				reason = string(utils.OranO2IMSConditionReasons.DeploymentNotFound)
-			}
-			meta.SetStatusCondition(
-				&orano2ims.Status.DeploymentsStatus.Conditions,
-				metav1.Condition{
-					Type:    string(utils.OranO2IMSConditionTypes.Error),
-					Status:  metav1.ConditionTrue,
-					Reason:  reason,
-					Message: "Error when querying for the metadata server",
-				},
-			)
-
-			meta.SetStatusCondition(
-				&orano2ims.Status.DeploymentsStatus.Conditions,
-				metav1.Condition{
-					Type:    string(utils.OranO2IMSConditionTypes.Ready),
-					Status:  metav1.ConditionFalse,
-					Reason:  string(utils.OranO2IMSConditionReasons.DeploymentsReady),
-					Message: "The ORAN O2IMS Deployments are not yet ready",
-				},
-			)
-		} else {
-			for _, condition := range deployment.Status.Conditions {
-				if condition.Type == "Available" {
-					meta.SetStatusCondition(
-						&orano2ims.Status.DeploymentsStatus.Conditions,
-						metav1.Condition{
-							Type:    string(utils.OranO2IMSConditionTypes.MetadataServerAvailable),
-							Status:  metav1.ConditionStatus(condition.Status),
-							Reason:  condition.Reason,
-							Message: condition.Message,
-						},
-					)
-				}
-			}
-		}
-	}
-
-	if orano2ims.Spec.DeploymentManagerServer {
-		deployment := &appsv1.Deployment{}
-		err := r.Get(ctx, types.NamespacedName{Name: utils.ORANO2IMSDeploymentManagerServerName, Namespace: utils.ORANO2IMSNamespace}, deployment)
-
-		if err != nil {
-			reason := string(utils.OranO2IMSConditionReasons.ErrorGettingDeploymentInformation)
-			if errors.IsNotFound(err) {
-				reason = string(utils.OranO2IMSConditionReasons.DeploymentNotFound)
-			}
-
-			meta.SetStatusCondition(
-				&orano2ims.Status.DeploymentsStatus.Conditions,
-				metav1.Condition{
-					Type:    string(utils.OranO2IMSConditionTypes.Error),
-					Status:  metav1.ConditionTrue,
-					Reason:  reason,
-					Message: "Error when querying for the metadata server",
-				},
-			)
-
-			meta.SetStatusCondition(
-				&orano2ims.Status.DeploymentsStatus.Conditions,
-				metav1.Condition{
-					Type:    string(utils.OranO2IMSConditionTypes.Ready),
-					Status:  metav1.ConditionFalse,
-					Reason:  string(utils.OranO2IMSConditionReasons.DeploymentsReady),
-					Message: "The ORAN O2IMS Deployments are not yet ready",
-				},
-			)
-		} else {
-			for _, condition := range deployment.Status.Conditions {
-				if condition.Type == "Available" {
-					meta.SetStatusCondition(
-						&orano2ims.Status.DeploymentsStatus.Conditions,
-						metav1.Condition{
-							Type:    string(utils.OranO2IMSConditionTypes.DeploymentServerAvailable),
-							Status:  metav1.ConditionStatus(condition.Status),
-							Reason:  condition.Reason,
-							Message: condition.Message,
-						},
-					)
-				}
-			}
-		}
-	}
-
-	r.Status().Update(ctx, orano2ims)
-}
-
-func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
+func (r *ORANO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2ims *oranv1alpha1.ORANO2IMS) error {
 	r.Log.Info("[deployMetadataServer]")
 
 	// Build the deployment's metadata.
@@ -242,7 +145,7 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 		Name:      utils.ORANO2IMSMetadataServerName,
 		Namespace: utils.ORANO2IMSNamespace,
 		Labels: map[string]string{
-			"oran/o2ims": orano2ims.Name,
+			"oran-o2ims": orano2ims.Name,
 			"app":        utils.ORANO2IMSMetadataServerName,
 		},
 	}
@@ -320,7 +223,7 @@ func (r *OranO2IMSReconciler) deployMetadataServer(ctx context.Context, orano2im
 		newDeployment, orano2ims, &appsv1.Deployment{}, r.Scheme, utils.UPDATE)
 }
 
-func (r *OranO2IMSReconciler) deployManagerServer(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
+func (r *ORANO2IMSReconciler) deployManagerServer(ctx context.Context, orano2ims *oranv1alpha1.ORANO2IMS) error {
 	r.Log.Info("[deployManagerServer]")
 
 	// Build the deployment's metadata.
@@ -430,7 +333,7 @@ func (r *OranO2IMSReconciler) deployManagerServer(ctx context.Context, orano2ims
 		newDeployment, orano2ims, &appsv1.Deployment{}, r.Scheme, utils.UPDATE)
 }
 
-func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS, resourceName string) error {
+func (r *ORANO2IMSReconciler) createServiceAccount(ctx context.Context, orano2ims *oranv1alpha1.ORANO2IMS, resourceName string) error {
 	r.Log.Info("[createServiceAccount]")
 	// Build the ServiceAccount object.
 	serviceAccountMeta := metav1.ObjectMeta{
@@ -450,7 +353,7 @@ func (r *OranO2IMSReconciler) createServiceAccount(ctx context.Context, orano2im
 		newServiceAccount, orano2ims, &corev1.ServiceAccount{}, r.Scheme, utils.UPDATE)
 }
 
-func (r *OranO2IMSReconciler) createService(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS, resourceName string) error {
+func (r *ORANO2IMSReconciler) createService(ctx context.Context, orano2ims *oranv1alpha1.ORANO2IMS, resourceName string) error {
 	r.Log.Info("[createService]")
 	// Build the Service object.
 	serviceMeta := metav1.ObjectMeta{
@@ -487,7 +390,7 @@ func (r *OranO2IMSReconciler) createService(ctx context.Context, orano2ims *oran
 		newService, orano2ims, &corev1.Service{}, r.Scheme, utils.PATCH)
 }
 
-func (r *OranO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oranv1alpha1.OranO2IMS) error {
+func (r *ORANO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oranv1alpha1.ORANO2IMS) error {
 	r.Log.Info("[createIngress]")
 	// Build the Ingress object.
 	ingressMeta := metav1.ObjectMeta{
@@ -552,12 +455,71 @@ func (r *OranO2IMSReconciler) createIngress(ctx context.Context, orano2ims *oran
 		newIngress, orano2ims, &networkingv1.Ingress{}, r.Scheme, utils.UPDATE)
 }
 
+func (r *ORANO2IMSReconciler) updateORANO2ISMStatusConditions(ctx context.Context, orano2ims *oranv1alpha1.ORANO2IMS, deploymentName string) {
+	deployment := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: utils.ORANO2IMSNamespace}, deployment)
+
+	if err != nil {
+		reason := string(utils.ORANO2IMSConditionReasons.ErrorGettingDeploymentInformation)
+		if errors.IsNotFound(err) {
+			reason = string(utils.ORANO2IMSConditionReasons.DeploymentNotFound)
+		}
+		meta.SetStatusCondition(
+			&orano2ims.Status.DeploymentsStatus.Conditions,
+			metav1.Condition{
+				Type:    string(utils.ORANO2IMSConditionTypes.Error),
+				Status:  metav1.ConditionTrue,
+				Reason:  reason,
+				Message: fmt.Sprintf("Error when querying for the %s server", deploymentName),
+			},
+		)
+
+		meta.SetStatusCondition(
+			&orano2ims.Status.DeploymentsStatus.Conditions,
+			metav1.Condition{
+				Type:    string(utils.ORANO2IMSConditionTypes.Ready),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(utils.ORANO2IMSConditionReasons.DeploymentsReady),
+				Message: "The ORAN O2IMS Deployments are not yet ready",
+			},
+		)
+	} else {
+		for _, condition := range deployment.Status.Conditions {
+			if condition.Type == "Available" {
+				meta.SetStatusCondition(
+					&orano2ims.Status.DeploymentsStatus.Conditions,
+					metav1.Condition{
+						Type:    string(utils.MapDeploymentNameConditionType[deploymentName]),
+						Status:  metav1.ConditionStatus(condition.Status),
+						Reason:  condition.Reason,
+						Message: condition.Message,
+					},
+				)
+			}
+		}
+	}
+}
+
+func (r *ORANO2IMSReconciler) updateORANO2ISMStatus(ctx context.Context, orano2ims *oranv1alpha1.ORANO2IMS) {
+
+	r.Log.Info(">>> update status")
+	if orano2ims.Spec.MetadataServer {
+		r.updateORANO2ISMStatusConditions(ctx, orano2ims, utils.ORANO2IMSMetadataServerName)
+	}
+
+	if orano2ims.Spec.DeploymentManagerServer {
+		r.updateORANO2ISMStatusConditions(ctx, orano2ims, utils.ORANO2IMSDeploymentManagerServerName)
+	}
+
+	r.Status().Update(ctx, orano2ims)
+}
+
 // SetupWithManager sets up the controller with the Manager.
-func (r *OranO2IMSReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ORANO2IMSReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("orano2ims").
-		For(&oranv1alpha1.OranO2IMS{},
+		For(&oranv1alpha1.ORANO2IMS{},
 			// Watch for create event for orano2ims.
 			builder.WithPredicates(predicate.Funcs{
 				UpdateFunc: func(e event.UpdateEvent) bool {

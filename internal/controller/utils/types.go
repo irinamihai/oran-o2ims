@@ -1,38 +1,37 @@
 package utils
 
-// OranO2IMSConditionType defines conditions of an OranO2IMS deployment.
-type OranO2IMSConditionType string
+// ORANO2IMSConditionType defines conditions of an ORANO2IMS deployment.
+type ORANO2IMSConditionType string
 
-var OranO2IMSConditionTypes = struct {
-	Ready                     OranO2IMSConditionType
-	NotReady                  OranO2IMSConditionType
-	Error                     OranO2IMSConditionType
-	Available                 OranO2IMSConditionType
-	MetadataServerAvailable   OranO2IMSConditionType
-	DeploymentServerAvailable OranO2IMSConditionType
+var ORANO2IMSConditionTypes = struct {
+	Ready                     ORANO2IMSConditionType
+	NotReady                  ORANO2IMSConditionType
+	Error                     ORANO2IMSConditionType
+	Available                 ORANO2IMSConditionType
+	MetadataServerAvailable   ORANO2IMSConditionType
+	DeploymentServerAvailable ORANO2IMSConditionType
 }{
 	Ready:                     "ORANO2IMSReady",
-	NotReady:                  "OranO2IMSConditionType",
+	NotReady:                  "ORANO2IMSConditionType",
 	Error:                     "Error",
 	Available:                 "Available",
 	MetadataServerAvailable:   "MetadataServerAvailable",
 	DeploymentServerAvailable: "DeploymentServerAvailable",
 }
 
-type OranO2IMSConditionReason string
+type ORANO2IMSConditionReason string
 
-var OranO2IMSConditionReasons = struct {
-	DeploymentsReady                  OranO2IMSConditionReason
-	DeploymentsError                  OranO2IMSConditionReason
-	MetadataServerAvailable           OranO2IMSConditionReason
-	DeploymentServerAvailable         OranO2IMSConditionReason
-	ErrorGettingDeploymentInformation OranO2IMSConditionReason
-	DeploymentNotFound                OranO2IMSConditionReason
+var ORANO2IMSConditionReasons = struct {
+	DeploymentsReady                  ORANO2IMSConditionReason
+	DeploymentsError                  ORANO2IMSConditionReason
+	ErrorGettingDeploymentInformation ORANO2IMSConditionReason
+	DeploymentNotFound                ORANO2IMSConditionReason
 }{
-	DeploymentsReady:                  "DeploymensReady",
-	DeploymentsError:                  "DeploymentsError",
-	MetadataServerAvailable:           "MetadataServerAvailable",
-	DeploymentServerAvailable:         "DeploymentServerAvailabe",
 	ErrorGettingDeploymentInformation: "ErrorGettingDeploymentInformation",
 	DeploymentNotFound:                "DeploymentNotFound",
+}
+
+var MapDeploymentNameConditionType = map[string]ORANO2IMSConditionType{
+	ORANO2IMSMetadataServerName:          ORANO2IMSConditionTypes.MetadataServerAvailable,
+	ORANO2IMSDeploymentManagerServerName: ORANO2IMSConditionTypes.DeploymentServerAvailable,
 }
