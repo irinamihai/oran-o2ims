@@ -47,7 +47,7 @@ type ClientBuilder struct {
 	flags          *pflag.FlagSet
 }
 
-// Client is an implementtion of the controller-runtime WithWatch interface with additional
+// Client is an implementaion of the controller-runtime WithWatch interface with additional
 // functionality, like the capability to connect using an SSH tunnel.
 
 type Client struct {
@@ -55,7 +55,7 @@ type Client struct {
 	delegate clnt.WithWatch
 }
 
-// set fake client to be used for test.go
+// NewFakeClient sets a fake client to be used for test.go
 func NewFakeClient() *Client {
 	client := Client{}
 	client.delegate = fake.NewFakeClient()
