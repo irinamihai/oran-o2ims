@@ -37,7 +37,7 @@ func (b *KubeConfigMapStore) SetName(
 	return b
 }
 
-func (b *KubeConfigMapStore) SetFieldOwnder(
+func (b *KubeConfigMapStore) SetFieldOwner(
 	owner string) *KubeConfigMapStore {
 	b.fieldOwner = owner
 	return b
