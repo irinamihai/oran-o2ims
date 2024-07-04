@@ -18,11 +18,14 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -147,7 +150,125 @@ func (t *clusterRequestReconcilerTask) run(ctx context.Context) (nextReconcile c
 		nextReconcile = ctrl.Result{RequeueAfter: 30 * time.Second}
 	}
 
+	err = t.createClusterInstanceResources(ctx)
+
 	return
+}
+
+// createClusterInstanceResources creates all the resources needed for the
+// ClusterInstance object to perform a successful installation.
+func (t *clusterRequestReconcilerTask) createClusterInstanceResources(
+	ctx context.Context) error {
+
+	// Create the clusterInstance namespace.
+	err, clusterName := t.createClusterInstanceNamespace(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Create the BMC secrets.
+	err = t.createClusterInstanceBMCSecrets(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// createClusterInstanceNamespace creates the namespace of the ClusterInstance
+// where all the other resources needed for installation will exist.
+func (t *clusterRequestReconcilerTask) createClusterInstanceNamespace(
+	ctx context.Context) (error, string) {
+
+	var inputData map[string]interface{}
+	err := json.Unmarshal([]byte(t.object.Spec.ClusterTemplateInput), &inputData)
+	if err != nil {
+		return err, ""
+	}
+
+	// If we got to this point, we can assume that all the keys exist, including
+	// clusterName
+	clusterNameInterface, clusterNameExist := inputData["clusterName"]
+	if !clusterNameExist {
+		return fmt.Errorf(
+			"\"clusterNameExist\" key expected to exist in ClusterTemplateInput of ClusterRequest %s, but it's missing",
+			t.object.Name,
+		), ""
+	}
+
+	clusterName := clusterNameInterface.(string)
+	t.logger.InfoContext(
+		ctx,
+		"nodes: "+fmt.Sprintf("%v", clusterName),
+	)
+
+	// Create the namespace.
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: clusterName,
+		},
+	}
+	err = utils.CreateK8sCR(ctx, t.client, namespace, t.object, utils.UPDATE)
+		if err != nil {
+			return err, ""
+		}
+
+	return nil, clusterName
+}
+
+// createClusterInstanceBMCSecrets creates all the BMC secrets needed by the nodes included
+// in the ClusterRequest.
+func (t *clusterRequestReconcilerTask) createClusterInstanceBMCSecrets(
+	ctx context.Context, clusterName string) error {
+
+	var inputData map[string]interface{}
+	err := json.Unmarshal([]byte(t.object.Spec.ClusterTemplateInput), &inputData)
+	if err != nil {
+		return err
+	}
+
+	// If we got to this point, we can assume that all the keys up to the BMC details
+	// exists since ClusterInstance has nodes mandatory.
+	nodesInterface, nodesExist := inputData["nodes"]
+	if !nodesExist {
+		return fmt.Errorf(
+			"\"nodes\" key expected to exist in ClusterTemplateInput of ClusterRequest %s, but it's missing",
+			t.object.Name,
+		)
+	}
+
+	t.logger.InfoContext(
+		ctx,
+		"nodes: "+fmt.Sprintf("%v", nodesInterface),
+	)
+
+	nodes := nodesInterface.([]interface{})
+	// Go through all the nodes.
+	for _, nodeInterface := range nodes {
+		node := nodeInterface.(map[string]interface{})
+		
+		username, password, secretName, err := 
+		    utils.GetBMCDetailsForClusterInstance(node, t.object.Name)
+
+		// Create the node's BMC secret.
+		bmcSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: secretName,
+				Namespace: clusterName,
+			},
+			Data: map[string][]byte{
+				"username": []byte(username),
+				"password": []byte(password),
+			},
+		}
+
+		err = utils.CreateK8sCR(ctx, t.client, bmcSecret, t.object, utils.UPDATE)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // validateClusterTemplateInput validates if the clusterTemplateInput matches the
