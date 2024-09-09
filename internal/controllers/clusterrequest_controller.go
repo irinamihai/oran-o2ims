@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -236,14 +235,19 @@ func (t *clusterRequestReconcilerTask) run(ctx context.Context) (ctrl.Result, er
 
 	crProvisionedCond := meta.FindStatusCondition(
 		t.object.Status.Conditions, string(utils.CRconditionTypes.ClusterProvisioned))
-	if crProvisionedCond != nil {
+	if crProvisionedCond != nil &&
+		crProvisionedCond.Status == metav1.ConditionTrue &&
+		crProvisionedCond.Reason == string(utils.CRconditionReasons.Completed) {
 		// Handle configuration through policies.
-		err = t.handleClusterPolicyConfiguration(ctx)
+		requeue, err := t.handleClusterPolicyConfiguration(ctx)
 		if err != nil {
 			if utils.IsInputError(err) {
 				return doNotRequeue(), nil
 			}
 			return requeueWithError(err)
+		}
+		if requeue {
+			return requeueWithMediumInterval(), nil
 		}
 	}
 
@@ -761,83 +765,6 @@ func (t *clusterRequestReconcilerTask) handleClusterInstallation(ctx context.Con
 	if err != nil {
 		return fmt.Errorf("failed to handle ClusterInstallation: %w", err)
 	}
-	return nil
-}
-
-// handleClusterPolicyConfiguration updates the ClusterRequest status to reflect the status
-// of the policies that match the managed cluster created through the ClusterRequest.
-func (t *clusterRequestReconcilerTask) handleClusterPolicyConfiguration(ctx context.Context) error {
-	if t.object.Status.ClusterInstanceRef == nil {
-		return fmt.Errorf("status.clusterInstanceRef is empty")
-	}
-	// Get all the child policies in the namespace of the managed cluster created through
-	// the ClusterRequest.
-	policies := &policiesv1.PolicyList{}
-	listOpts := []client.ListOption{
-		client.HasLabels{utils.ChildPolicyRootPolicyLabel},
-		client.InNamespace(t.object.Status.ClusterInstanceRef.Name),
-	}
-
-	err := t.client.List(ctx, policies, listOpts...)
-	if err != nil {
-		return fmt.Errorf("failed to list Policies: %w", err)
-	}
-
-	allPoliciesCompliant := true
-	nonCompliantPolicyInEnforce := false
-	var targetPolicies []oranv1alpha1.PolicyDetails
-	// Go through all the policies and get those that are matched with the managed cluster created
-	// by the current cluster request.
-	for _, policy := range policies.Items {
-		if policy.Status.ComplianceState != policiesv1.Compliant {
-			allPoliciesCompliant = false
-			if strings.EqualFold(string(policy.Spec.RemediationAction), string(policiesv1.Enforce)) {
-				nonCompliantPolicyInEnforce = true
-			}
-		}
-		// Child policy name = parent_policy_namespace.parent_policy_name
-		policyNameArr := strings.Split(policy.Name, ".")
-		targetPolicy := &oranv1alpha1.PolicyDetails{
-			Compliant:         string(policy.Status.ComplianceState),
-			PolicyName:        policyNameArr[1],
-			PolicyNamespace:   policyNameArr[0],
-			RemediationAction: string(policy.Spec.RemediationAction),
-		}
-		targetPolicies = append(targetPolicies, *targetPolicy)
-	}
-
-	// Update the ConfigurationApplied condition.
-	if allPoliciesCompliant {
-		utils.SetStatusCondition(&t.object.Status.Conditions,
-			utils.CRconditionTypes.ConfigurationApplied,
-			utils.CRconditionReasons.Completed,
-			metav1.ConditionTrue,
-			"The configuration is up to date",
-		)
-	} else {
-		if nonCompliantPolicyInEnforce {
-			utils.SetStatusCondition(&t.object.Status.Conditions,
-				utils.CRconditionTypes.ConfigurationApplied,
-				utils.CRconditionReasons.InProgress,
-				metav1.ConditionFalse,
-				"The configuration is still being applied",
-			)
-		} else {
-			utils.SetStatusCondition(&t.object.Status.Conditions,
-				utils.CRconditionTypes.ConfigurationApplied,
-				utils.CRconditionReasons.OutOfDate,
-				metav1.ConditionFalse,
-				"The configuration is out of date",
-			)
-		}
-	}
-
-	t.object.Status.Policies = targetPolicies
-	// Update the current policy status
-	if updateErr := utils.UpdateK8sCRStatus(ctx, t.client, t.object); updateErr != nil {
-		return fmt.Errorf("failed to update status for ClusterRequest %s: %w", t.object.Name, updateErr)
-	}
-
 	return nil
 }
 
@@ -1818,62 +1745,6 @@ func (r *ClusterRequestReconciler) findManagedClusterForClusterRequest(
 			},
 		)
 	}
-}
-
-// findPoliciesForClusterRequests creates reconciliation requests for the ClusterRequests
-// whose associated ManagedClusters have matched policies Updated or Deleted.
-func findPoliciesForClusterRequests[T deleteOrUpdateEvent](
-	ctx context.Context, c client.Client, e T, q workqueue.RateLimitingInterface) {
-
-	policy := &policiesv1.Policy{}
-	switch evt := any(e).(type) {
-	case event.UpdateEvent:
-		policy = evt.ObjectOld.(*policiesv1.Policy)
-	case event.DeleteEvent:
-		policy = evt.Object.(*policiesv1.Policy)
-	default:
-		// Only Update and Delete events are supported
-		return
-	}
-
-	// Get the ClusterInstance.
-	clusterInstance := &siteconfig.ClusterInstance{}
-	err := c.Get(ctx, types.NamespacedName{
-		Namespace: policy.Namespace,
-		Name:      policy.Namespace,
-	}, clusterInstance)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// Return as the ManagedCluster for this Namespace is not deployed/managed by ClusterInstance.
-			return
-		}
-		return
-	}
-
-	clusterRequest, okCR := clusterInstance.GetLabels()[clusterRequestNameLabel]
-	clusterRequestNs, okCRNs := clusterInstance.GetLabels()[clusterRequestNamespaceLabel]
-	if okCR && okCRNs {
-		q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
-			Name:      clusterRequest,
-			Namespace: clusterRequestNs,
-		}})
-	}
-}
-
-// handlePolicyEvent handled Updates and Deleted events.
-func (r *ClusterRequestReconciler) handlePolicyEventDelete(
-	ctx context.Context, e event.DeleteEvent, q workqueue.RateLimitingInterface) {
-
-	// Call the generic function for determining the corresponding ClusterRequest.
-	findPoliciesForClusterRequests(ctx, r.Client, e, q)
-}
-
-// handlePolicyEvent handled Updates and Deleted events.
-func (r *ClusterRequestReconciler) handlePolicyEventUpdate(
-	ctx context.Context, e event.UpdateEvent, q workqueue.RateLimitingInterface) {
-
-	// Call the generic function.
-	findPoliciesForClusterRequests(ctx, r.Client, e, q)
 }
 
 // SetupWithManager sets up the controller with the Manager.
