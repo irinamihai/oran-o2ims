@@ -161,7 +161,8 @@ func HasApiEndpoints(serverName string) bool {
 		serverName == InventoryAlarmServerName ||
 		serverName == InventoryMetadataServerName ||
 		serverName == InventoryResourceServerName ||
-		serverName == InventoryDeploymentManagerServerName
+		serverName == InventoryDeploymentManagerServerName ||
+		serverName == InventoryArtifactsServerName
 }
 
 // HasDatabase determines whether a server owns a logical database instance
@@ -424,6 +425,13 @@ func GetServerArgs(inventory *inventoryv1alpha1.Inventory, serverName string) (r
 
 		// Add SMO/OAuth command line arguments
 		result = addArgsForSMO(inventory, result)
+		return
+	}
+
+	if serverName == InventoryArtifactsServerName {
+		result = slices.Clone(ArtifactsServerArgs)
+
+		// TODO: Add SMO/OAuth command line arguments when notifications are added.
 		return
 	}
 

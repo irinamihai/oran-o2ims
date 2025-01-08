@@ -81,6 +81,12 @@ type ServerConfig struct {
 	Enabled bool `json:"enabled"`
 }
 
+// ArtifactsServerConfig contains the configuration for the artifacts server.
+type ArtifactsServerConfig struct {
+	//+kubebuilder:default:={enabled:true}
+	ServerConfig `json:",inline"`
+}
+
 // MetadataServerConfig contains the configuration for the metadata server.
 type MetadataServerConfig struct {
 	//+kubebuilder:default:={enabled:true}
@@ -163,6 +169,9 @@ type InventorySpec struct {
 	//+optional
 	//+operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Cloud ID",xDescriptors={"urn:alm:descriptor:com.tectonic.ui:text"}
 	CloudID *string `json:"cloudID"`
+	//+optionsl
+	//+operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Artifacts Server Configuration",xDescriptors={"urn:alm:descriptor:com.tectonic.ui:text"}
+	ArtifactsServerConfig ArtifactsServerConfig `json:"artifactsServerConfig"`
 	//+optional
 	//+operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Metadata Server Configuration",xDescriptors={"urn:alm:descriptor:com.tectonic.ui:text"}
 	MetadataServerConfig MetadataServerConfig `json:"metadataServerConfig"`
@@ -206,9 +215,12 @@ type DeploymentsStatus struct {
 	ResourceServerStatus string `json:"resourceServerStatus,omitempty"`
 	// +operator-sdk:csv:customresourcedefinitions:type=status,displayName="Alarm Server Status"
 	AlarmServerStatus string `json:"alarmServerStatus,omitempty"`
+	// +operator-sdk:csv:customresourcedefinitions:type=status,displayName="Artifacts Server Status"
+	ArtifactsServerStatus string `json:"artifactsServerStatus,omitempty"`
 }
 
 type UsedServerConfig struct {
+	ArtifactsServerUsedConfig         []string `json:"artifactsServerUsedConfig,omitempty"`
 	MetadataServerUsedConfig          []string `json:"metadataServerUsedConfig,omitempty"`
 	ResourceServerUsedConfig          []string `json:"resourceServerUsedConfig,omitempty"`
 	DeploymentManagerServerUsedConfig []string `json:"deploymentManagerServerUsedConfig,omitempty"`
