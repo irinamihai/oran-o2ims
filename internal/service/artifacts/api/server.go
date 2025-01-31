@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	provisioningv1alpha1 "github.com/openshift-kni/oran-o2ims/api/provisioning/v1alpha1"
+	orano2imsutils "github.com/openshift-kni/oran-o2ims/internal/controllers/utils"
 	api "github.com/openshift-kni/oran-o2ims/internal/service/artifacts/api/generated"
 	common "github.com/openshift-kni/oran-o2ims/internal/service/common/api/generated"
 	"github.com/openshift-kni/oran-o2ims/internal/service/common/utils"
@@ -86,34 +87,19 @@ func (r *ArtifactsServer) GetManagedInfrastructureTemplates(
 	return api.GetManagedInfrastructureTemplates200JSONResponse(objects), nil
 }
 
-// Get managed infrastructure templates
-// (GET /o2ims-infrastructureArtifacts/v1/managedInfrastructureTemplates/{managedInfrastructureTemplateId})
-func (r *ArtifactsServer) GetManagedInfrastructureTemplate(
-	ctx context.Context, request api.GetManagedInfrastructureTemplateRequestObject) (api.GetManagedInfrastructureTemplateResponseObject, error) {
+// Get managed infrastructure template defaults
+// (GET /o2ims-infrastructureArtifacts/v1/managedInfrastructureTemplates/{managedInfrastructureTemplateId}/defaults)
+func (r *ArtifactsServer) GetManagedInfrastructureTemplateDefaults(
+	ctx context.Context,
+	request api.GetManagedInfrastructureTemplateDefaultsRequestObject) (api.GetManagedInfrastructureTemplateDefaultsResponseObject, error) {
 
-	// Get the ClusterTemplates with the requested ID.
-	var clusterTemplates provisioningv1alpha1.ClusterTemplateList
-	err := r.HubClient.List(
-		ctx,
-		&clusterTemplates,
-		client.MatchingFields{"metadata.name": request.ManagedInfrastructureTemplateId},
-	)
-
+	clusterTemplateObject, clusterTemplatesItems, err := getClusterTemplateById(ctx, r.HubClient, request.ManagedInfrastructureTemplateId)
 	if err != nil {
-		return nil, fmt.Errorf("could not list ManagedInfrastructureTemplates across the cluster: %w", err)
+		return nil, err
 	}
 
-	// There should be just one ClusterTemplate with the requested ID.
-	// We need ManagedInfrastructureTemplateId to match ClusterTemplate metadata.name
-	// which is of format ClusterTemplate <spec.name>.<spec.version>.
-	if len(clusterTemplates.Items) > 1 {
-		return nil, fmt.Errorf(
-			"more than one ManagedInfrastructureTemplate with the requested ID: %s",
-			request.ManagedInfrastructureTemplateId)
-	}
-
-	if len(clusterTemplates.Items) == 0 {
-		return api.GetManagedInfrastructureTemplate404ApplicationProblemPlusJSONResponse(
+	if clusterTemplateObject != nil {
+		return api.GetManagedInfrastructureTemplateDefaults404ApplicationProblemPlusJSONResponse(
 			common.ProblemDetails{
 				AdditionalAttributes: &map[string]string{
 					"managedInfrastructureTemplateId": request.ManagedInfrastructureTemplateId,
@@ -123,12 +109,100 @@ func (r *ArtifactsServer) GetManagedInfrastructureTemplate(
 			}), nil
 	}
 
+	oranct := clusterTemplatesItems[0]
+	// Get the response for the ClusterInstance default values.
+	clusterInstanceResults, err := orano2imsutils.GetDefaultsFromConfigMap(
+		ctx, r.HubClient,
+		oranct.Spec.Templates.ClusterInstanceDefaults,
+		oranct.Namespace,
+		orano2imsutils.ClusterInstanceTemplateDefaultsConfigmapKey,
+		oranct.Spec.TemplateParameterSchema.Raw,
+		provisioningv1alpha1.TemplateParamClusterInstance,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("could not get the clusterInstance default values: %w", err)
+	}
+
+	// Get the response for the Policy default values.
+	policyTemplateResults, err := orano2imsutils.GetDefaultsFromConfigMap(
+		ctx, r.HubClient,
+		oranct.Spec.Templates.PolicyTemplateDefaults,
+		oranct.Namespace,
+		orano2imsutils.PolicyTemplateDefaultsConfigmapKey,
+		oranct.Spec.TemplateParameterSchema.Raw,
+		provisioningv1alpha1.TemplateParamPolicyConfig,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("could not get the policy configuration default values: %w", err)
+	}
+
+	// Build the final response object.
+	object := api.ManagedInfrastructureTemplateDefaults{
+		PolicyTemplateDefaults:  &policyTemplateResults,
+		ClusterInstanceDefaults: &clusterInstanceResults,
+	}
+
+	// Convert the current ClusterTemplate to ManagedInfrastructureTemplate.
+	return api.GetManagedInfrastructureTemplateDefaults200JSONResponse(object), nil
+}
+
+// Get managed infrastructure templates
+// (GET /o2ims-infrastructureArtifacts/v1/managedInfrastructureTemplates/{managedInfrastructureTemplateId})
+func (r *ArtifactsServer) GetManagedInfrastructureTemplate(
+	ctx context.Context, request api.GetManagedInfrastructureTemplateRequestObject) (api.GetManagedInfrastructureTemplateResponseObject, error) {
+
+	responseObject, clusterTemplatesItems, err := getClusterTemplateById(ctx, r.HubClient, request.ManagedInfrastructureTemplateId)
+	if err != nil {
+		return nil, err
+	}
+
+	if responseObject != nil {
+		return responseObject, nil
+	}
+
 	// Convert the ClusterTemplate to the ManagedInfrastructureTemplate format.
-	object, err := clusterTemplateToManagedInfrastructureTemplate(clusterTemplates.Items[0])
+	object, err := clusterTemplateToManagedInfrastructureTemplate(clusterTemplatesItems[0])
 	if err != nil {
 		return nil, err
 	}
 	return api.GetManagedInfrastructureTemplate200JSONResponse(object), nil
+}
+
+func getClusterTemplateById(ctx context.Context, c client.Client, clusterTemplateId string) (
+	api.GetManagedInfrastructureTemplateResponseObject, []provisioningv1alpha1.ClusterTemplate, error) {
+	// Get the ClusterTemplates with the requested ID.
+	var clusterTemplates provisioningv1alpha1.ClusterTemplateList
+	err := c.List(
+		ctx,
+		&clusterTemplates,
+		client.MatchingFields{"metadata.name": clusterTemplateId},
+	)
+
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not list ManagedInfrastructureTemplates across the cluster: %w", err)
+	}
+
+	// There should be just one ClusterTemplate with the requested ID.
+	// We need ManagedInfrastructureTemplateId to match ClusterTemplate metadata.name
+	// which is of format ClusterTemplate <spec.name>.<spec.version>.
+	if len(clusterTemplates.Items) > 1 {
+		return nil, nil, fmt.Errorf(
+			"more than one ManagedInfrastructureTemplate with the requested ID: %s",
+			clusterTemplateId)
+	}
+
+	if len(clusterTemplates.Items) == 0 {
+		return api.GetManagedInfrastructureTemplate404ApplicationProblemPlusJSONResponse(
+			common.ProblemDetails{
+				AdditionalAttributes: &map[string]string{
+					"managedInfrastructureTemplateId": clusterTemplateId,
+				},
+				Detail: "requested ManagedInfrastructureTemplate not found",
+				Status: http.StatusNotFound,
+			}), nil, nil
+	}
+
+	return nil, clusterTemplates.Items, nil
 }
 
 func clusterTemplateToManagedInfrastructureTemplate(clusterTemplate provisioningv1alpha1.ClusterTemplate) (

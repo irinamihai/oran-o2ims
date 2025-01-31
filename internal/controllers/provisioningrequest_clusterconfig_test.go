@@ -2221,5 +2221,5 @@ var _ = Describe("addClusterTemplateLabels", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring(
 			fmt.Sprintf("the expected Agent was not found in the %s namespace", mclName)))
-	})
+ 	})
 })
