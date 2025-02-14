@@ -309,6 +309,10 @@ func validateConfigmapReference[T any](
 		if err = utils.ValidateDefaultInterfaces(data); err != nil {
 			return utils.NewInputError("failed to validate the default ConfigMap: %w", err)
 		}
+
+		if err = utils.ValidateDefaultConfigmapSchema(ctx, c, data); err != nil {
+			return utils.NewInputError("default ConfigMap does not match ClusterInstance schema: %w", err)
+		}
 	}
 
 	// Extract and validate the timeout from the configmap

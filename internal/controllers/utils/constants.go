@@ -135,6 +135,7 @@ const (
 	ClusterInstanceTemplateName                 = "ClusterInstance"
 	ClusterInstanceTemplatePath                 = "controllers/clusterinstance-template.yaml"
 	ClusterInstanceTemplateDefaultsConfigmapKey = "clusterinstance-defaults"
+	ClusterInstanceCrdName                      = "clusterinstances"
 )
 
 var (
@@ -157,6 +158,8 @@ var (
 		{"nodes", "*", "bmcCredentialsName"},
 		{"nodes", "*", "bootMACAddress"},
 		{"nodes", "*", "nodeNetwork", "interfaces", "*", "macAddress"},
+		// The interface labels are not part of the ClusterInstance.
+		{"nodes", "*", "nodeNetwork", "interfaces", "*", "label"},
 		// modified for upgrade
 		{"suppressedManifests"},
 	}

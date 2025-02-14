@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/r3labs/diff/v3"
@@ -76,10 +77,10 @@ func ExtractMatchingInput(parentSchema []byte, subSchemaKey string) (any, error)
 	return matchingInput, nil
 }
 
-// disallowUnknownFieldsInSchema updates a schema by adding "additionalProperties": false
+// DisallowUnknownFieldsInSchema updates a schema by adding "additionalProperties": false
 // to all objects/arrays that define "properties". This ensures that any unknown fields
 // not defined in the schema will be disallowed during validation.
-func disallowUnknownFieldsInSchema(schema map[string]any) {
+func DisallowUnknownFieldsInSchema(schema map[string]any) {
 	// Check if the current schema level has "properties" defined
 	if properties, hasProperties := schema["properties"]; hasProperties {
 		// If "additionalProperties" is not already set, add it with the value false
@@ -91,7 +92,7 @@ func disallowUnknownFieldsInSchema(schema map[string]any) {
 		if propsMap, ok := properties.(map[string]any); ok {
 			for _, propValue := range propsMap {
 				if propSchema, ok := propValue.(map[string]any); ok {
-					disallowUnknownFieldsInSchema(propSchema)
+					DisallowUnknownFieldsInSchema(propSchema)
 				}
 			}
 		}
@@ -100,7 +101,7 @@ func disallowUnknownFieldsInSchema(schema map[string]any) {
 	// Recurse into each property defined under "items"
 	if items, hasItems := schema["items"]; hasItems {
 		if itemSchema, ok := items.(map[string]any); ok {
-			disallowUnknownFieldsInSchema(itemSchema)
+			DisallowUnknownFieldsInSchema(itemSchema)
 		}
 	}
 
@@ -201,7 +202,7 @@ func (r *ProvisioningRequest) ValidateClusterInstanceInputMatchesSchema(
 			"failed to extract %s subschema: %s", TemplateParamClusterInstance, err.Error())
 	}
 	// Any unknown fields not defined in the schema will be disallowed
-	disallowUnknownFieldsInSchema(clusterInstanceSubSchema)
+	DisallowUnknownFieldsInSchema(clusterInstanceSubSchema)
 
 	// Get the matching input for ClusterInstanceParameters
 	clusterInstanceMatchingInput, err := ExtractMatchingInput(
@@ -257,6 +258,27 @@ func (r *ProvisioningRequest) GetClusterTemplateRef(ctx context.Context, client 
 		clusterTemplateRefName)
 }
 
+/*
+type numberTypeDiffer struct {
+	DiffFunc (func(path []string, a, b reflect.Value, p interface{}) error)
+}
+
+func (nr *DateDiffer) InsertParentDiffer(dfunc func(path []string, a, b reflect.Value, p interface{}) error) {
+	nr.DiffFunc = dfunc
+}
+
+func (nr *numberTypeDiffer) Match(a, b reflect.Value) bool {
+	return diff.AreType(a, b, reflect.TypeOf(testType("")))
+}
+
+func (nr *numberTypeDiffer) Diff(dt DiffType, df DiffFunc, cl *Changelog, path []string, a, b reflect.Value, parent interface{}) error {
+	if a.String() != "custom" && b.String() != "match" {
+		cl.Add(diff.UPDATE, path, a.Interface(), b.Interface())
+	}
+	return nil
+}
+*/
+
 // FindClusterInstanceImmutableFieldUpdates identifies updates made to immutable fields
 // in the ClusterInstance fields. It returns two lists of paths: a list of updated fields
 // that are considered immutable and should not be modified and a list of fields related
@@ -264,15 +286,36 @@ func (r *ProvisioningRequest) GetClusterTemplateRef(ctx context.Context, client 
 func FindClusterInstanceImmutableFieldUpdates(
 	old, new map[string]any, ignoredFields [][]string) ([]string, []string, error) {
 
-	diffs, err := diff.Diff(old, new)
+		/*
+	differ, err := diff.NewDiffer(
+		diff.CustomValueDiffers(dif
+			"value": numberDiffer,
+		}),
+	)
+	*/
+	diffs, err := diff.Diff(old, new, diff.AllowTypeMismatch(true)) //diff.ConvertCompatibleTypes())
 	if err != nil {
 		return nil, nil, fmt.Errorf("error comparing differences between old "+
 			"and new ClusterInstance input: %w", err)
 	}
-
+	
 	var updatedFields []string
 	var scalingNodes []string
 	for _, diff := range diffs {
+		if diff.Type == "update" {
+			from := reflect.ValueOf(diff.From).Interface()
+			fromValue := fmt.Sprintf("%v", from)
+			fromType := fmt.Sprintf("%T", from)
+			to := reflect.ValueOf(diff.To).Interface()
+			toValue := fmt.Sprintf("%v", to)
+			toType := fmt.Sprintf("%T", to)
+
+			if fromType != toType {
+				if fromValue == toValue {
+					continue
+				}
+			}
+		}
 		/* Examples of diff result in json format
 
 		Label added at the cluster-level

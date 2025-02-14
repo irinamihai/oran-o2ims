@@ -47,7 +47,7 @@ func (t *provisioningRequestReconcilerTask) IsUpgradeRequested(
 	}
 	cmp := templateReleaseVersion.Compare(*managedClusterVersion)
 	if cmp == 1 {
-		return true, nil
+		return false, nil
 	} else if cmp == -1 {
 		return false, fmt.Errorf("template version (%v) is lower then ManagedCluster version (%v), no upgrade requested",
 			templateReleaseVersion, managedClusterVersion)

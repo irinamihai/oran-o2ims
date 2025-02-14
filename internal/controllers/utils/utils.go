@@ -796,6 +796,30 @@ func GetDefaultsFromSlices[K comparable, V any](
 	return editable, immutable, nil
 }
 
+
+func GetAllKeys[K comparable, V any](mapSchema map[K]V, keysMap map[K]bool) {
+   for key, value := range mapSchema {
+		keysMap[key] = true
+
+		switch valueTyped := any(value).(type) {
+		case map[K]V:
+			GetAllKeys(valueTyped, keysMap)
+		case []V:
+			for _, v := range valueTyped {
+				// If v is of map type, recurse.
+				switch vTyped := any(v).(type) {
+				case map[K]V:
+					GetAllKeys(vTyped, keysMap)
+				default:
+					continue
+				}
+			}
+		default:
+			continue
+		}
+	}
+}
+
 // GetTLSSkipVerify returns the current requested value of the TLS Skip Verify setting
 func GetTLSSkipVerify() bool {
 	value, ok := os.LookupEnv(TLSSkipVerifyEnvName)
