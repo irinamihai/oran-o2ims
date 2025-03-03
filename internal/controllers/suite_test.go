@@ -90,6 +90,7 @@ func getFakeClientFromObjects(objs ...client.Object) client.WithWatch {
 		Build()
 }
 
+
 // Logger used for tests:
 var logger *slog.Logger
 
@@ -129,10 +130,10 @@ var _ = BeforeSuite(func() {
 	scheme.AddKnownTypes(appsv1.SchemeGroupVersion, &appsv1.DeploymentList{})
 	scheme.AddKnownTypes(siteconfig.GroupVersion, &siteconfig.ClusterInstance{})
 	scheme.AddKnownTypes(siteconfig.GroupVersion, &siteconfig.ClusterInstanceList{})
-	scheme.AddKnownTypes(appsv1.SchemeGroupVersion, &hwv1alpha1.HardwareTemplate{})
-	scheme.AddKnownTypes(appsv1.SchemeGroupVersion, &hwv1alpha1.NodePool{})
-	scheme.AddKnownTypes(appsv1.SchemeGroupVersion, &hwv1alpha1.Node{})
-	scheme.AddKnownTypes(appsv1.SchemeGroupVersion, &hwv1alpha1.NodeList{})
+	scheme.AddKnownTypes(hwv1alpha1.GroupVersion, &hwv1alpha1.HardwareTemplate{})
+	scheme.AddKnownTypes(hwv1alpha1.GroupVersion, &hwv1alpha1.NodePool{})
+	scheme.AddKnownTypes(hwv1alpha1.GroupVersion, &hwv1alpha1.Node{})
+	scheme.AddKnownTypes(hwv1alpha1.GroupVersion, &hwv1alpha1.NodeList{})
 	scheme.AddKnownTypes(policiesv1.SchemeGroupVersion, &policiesv1.Policy{})
 	scheme.AddKnownTypes(policiesv1.SchemeGroupVersion, &policiesv1.PolicyList{})
 	scheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
@@ -145,3 +146,4 @@ var _ = BeforeSuite(func() {
 	scheme.AddKnownTypes(assistedservicev1beta1.GroupVersion, &assistedservicev1beta1.AgentList{})
 	scheme.AddKnownTypes(apiextensionsv1.SchemeGroupVersion, &apiextensionsv1.CustomResourceDefinition{})
 })
+

@@ -171,6 +171,8 @@ var (
 		{"nodes", "*", "bmcCredentialsName"},
 		{"nodes", "*", "bootMACAddress"},
 		{"nodes", "*", "nodeNetwork", "interfaces", "*", "macAddress"},
+		// The interface labels are not part of the ClusterInstance.
+		{"nodes", "*", "nodeNetwork", "interfaces", "*", "label"},
 		// modified for upgrade
 		{"suppressedManifests"},
 	}

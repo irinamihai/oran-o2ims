@@ -403,9 +403,13 @@ go-generate:
 	@echo "All generated files are up-to-date."
 
 .PHONY: test tests
-test tests:
+test tests: envtest
 	@echo "Run ginkgo"
 	HWMGR_PLUGIN_NAMESPACE=hwmgr ginkgo run -r ./internal ./api $(ginkgo_flags)
+ifeq ($(shell uname -s),Linux)
+	@chmod -R u+w $(LOCALBIN)
+endif
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
 .PHONY: fmt
 fmt:
