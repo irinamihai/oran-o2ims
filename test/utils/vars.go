@@ -382,5 +382,33 @@ var (
 			"owner":       "openshift",
 			"crdFileName": "hive.openshift.io_clusterimagesets.yaml",
 		},
+		{
+			"repoName":    "baremetal-operator",
+			"modulePath":  "github.com/metal3-io/baremetal-operator/apis",
+			"crdPath":     "config/base/crds/bases",
+			"owner":       "metal3-io",
+			"crdFileName": "metal3.io_baremetalhosts.yaml",
+		},
+		{
+			"repoName":    "baremetal-operator",
+			"modulePath":  "github.com/metal3-io/baremetal-operator/apis",
+			"crdPath":     "config/base/crds/bases",
+			"owner":       "metal3-io",
+			"crdFileName": "metal3.io_hardwaredata.yaml",
+		},
+		{
+			"repoName":    "baremetal-operator",
+			"modulePath":  "github.com/metal3-io/baremetal-operator/apis",
+			"crdPath":     "config/base/crds/bases",
+			"owner":       "metal3-io",
+			"crdFileName": "metal3.io_hostfirmwarecomponents.yaml",
+		},
+		{
+			"repoName":    "baremetal-operator",
+			"modulePath":  "github.com/metal3-io/baremetal-operator/apis",
+			"crdPath":     "config/base/crds/bases",
+			"owner":       "metal3-io",
+			"crdFileName": "metal3.io_hostfirmwaresettings.yaml",
+		},
 	}
 )

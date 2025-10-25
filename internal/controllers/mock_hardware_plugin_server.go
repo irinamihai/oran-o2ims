@@ -70,6 +70,7 @@ import (
 	pluginsv1alpha1 "github.com/openshift-kni/oran-o2ims/api/hardwaremanagement/plugins/v1alpha1"
 	hwmgmtv1alpha1 "github.com/openshift-kni/oran-o2ims/api/hardwaremanagement/v1alpha1"
 	hwmgrpluginapi "github.com/openshift-kni/oran-o2ims/hwmgr-plugins/api/client/provisioning"
+	hwmgrutils "github.com/openshift-kni/oran-o2ims/hwmgr-plugins/controller/utils"
 	ctlrutils "github.com/openshift-kni/oran-o2ims/internal/controllers/utils"
 )
 
@@ -615,9 +616,16 @@ func (m *MockHardwarePluginServer) checkForAllocatedNodes(requestID string) bool
 func (m *MockHardwarePluginServer) createKubernetesNodeAllocationRequest(ctx context.Context, request *hwmgrpluginapi.NodeAllocationRequest, requestID string) error {
 	// Convert the hardware plugin API request to Kubernetes NodeAllocationRequest
 	k8sNodeAllocationRequest := &pluginsv1alpha1.NodeAllocationRequest{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "plugins.clcm.openshift.io/v1alpha1",
+			Kind:       "NodeAllocationRequest",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      requestID,
 			Namespace: ctlrutils.UnitTestHwmgrNamespace,
+			Labels: map[string]string{
+				hwmgrutils.HardwarePluginLabel: hwmgrutils.Metal3HardwarePluginID,
+			},
 		},
 		Spec: pluginsv1alpha1.NodeAllocationRequestSpec{
 			ClusterId:          request.ClusterId,
@@ -631,9 +639,11 @@ func (m *MockHardwarePluginServer) createKubernetesNodeAllocationRequest(ctx con
 			k8sNodeGroup := pluginsv1alpha1.NodeGroup{
 				Size: group.NodeGroupData.Size,
 				NodeGroupData: hwmgmtv1alpha1.NodeGroupData{
-					Name:      group.NodeGroupData.Name,
-					Role:      group.NodeGroupData.Role,
-					HwProfile: group.NodeGroupData.HwProfile,
+					Name:             group.NodeGroupData.Name,
+					Role:             group.NodeGroupData.Role,
+					HwProfile:        group.NodeGroupData.HwProfile,
+					ResourcePoolId:   group.NodeGroupData.ResourceGroupId,
+					ResourceSelector: group.NodeGroupData.ResourceSelector,
 				},
 			}
 			k8sNodeAllocationRequest.Spec.NodeGroup = append(k8sNodeAllocationRequest.Spec.NodeGroup, k8sNodeGroup)

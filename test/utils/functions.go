@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 	provisioningv1alpha1 "github.com/openshift-kni/oran-o2ims/api/provisioning/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -191,10 +192,16 @@ func CreateNodeResources(ctx context.Context, c client.Client, npName string) {
 
 func CreateResources(ctx context.Context, c client.Client, nodes []*pluginsv1alpha1.AllocatedNode, secrets []*corev1.Secret) {
 	for _, node := range nodes {
-		Expect(c.Create(ctx, node)).To(Succeed())
+		err := c.Create(ctx, node)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			Expect(err).ToNot(HaveOccurred())
+		}
 	}
 	for _, secret := range secrets {
-		Expect(c.Create(ctx, secret)).To(Succeed())
+		err := c.Create(ctx, secret)
+		if err != nil && !errors.IsAlreadyExists(err) {
+			Expect(err).ToNot(HaveOccurred())
+		}
 	}
 }
 
